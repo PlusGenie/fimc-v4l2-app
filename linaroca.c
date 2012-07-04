@@ -2,6 +2,8 @@
  *  2012 (C) Linaro 
  *  Sangwook Lee <sangwook.lee@linaro.org>
  *  Only MMAP FIMC V4L2 video capture example based on v4l2 capture.c 
+ *  
+ *  The main purpose of this app is to show to use V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
  *
  *  This program can be used and distributed without restrictions.
  *  GPLv2
@@ -10,8 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <getopt.h>             /* getopt_long() */
-#include <fcntl.h>              /* low-level i/o */
+#include <getopt.h>		/* getopt_long() */
+#include <fcntl.h>		/* low-level i/o */
 #include <unistd.h>
 #include <errno.h>
 #include <malloc.h>
@@ -21,7 +23,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 
-#include <asm/types.h>          /* for videodev2.h */
+#include <asm/types.h>		/* for videodev2.h */
 
 #include <linux/videodev2.h>
 
@@ -29,22 +31,22 @@
 
 #define PR_IO(x)	printf("v4l2-app:line%d "#x"\n",__LINE__)
 
-struct buffer {
-        char            *addr[VIDEO_MAX_PLANES];
-        unsigned long   size[VIDEO_MAX_PLANES];
-        unsigned int    num_planes;
-        unsigned int    index;
-        //enum format     fmt;
+typedef struct buffer {
+	char		*addr[VIDEO_MAX_PLANES];
+	unsigned long	size[VIDEO_MAX_PLANES];
+	unsigned int	num_planes;
+	unsigned int	index;
+	//enum format	  fmt;
 		struct v4l2_format fmt;
-        unsigned int    width;
-        unsigned int    height;
-};
+	unsigned int	width;
+	unsigned int	height;
+} fimc_buf_t;
 
-struct buffer *buffers = NULL;
+fimc_buf_t *buffers = NULL;
 static unsigned int n_buffers = 4;
 static int capture_pix_width = 640;
 static int capture_pix_height = 480;
-static char * dev_name  = "/dev/video1";
+static char * dev_name	= "/dev/video1";
 static int g_file_desc = -1;
 
 static void errno_exit(const char *s)
@@ -66,92 +68,91 @@ static int xioctl (int fd, int request, void * arg)
 
 static int init_mmap(unsigned int *n_buffers)
 {
-        struct v4l2_requestbuffers req;
-        unsigned int buf_index;
-        struct v4l2_plane planes[VIDEO_MAX_PLANES];
+	struct v4l2_requestbuffers req;
+	unsigned int buf_index;
+	struct v4l2_plane planes[VIDEO_MAX_PLANES];
 	struct v4l2_buffer buf;
 
-        memset(&req, 0, sizeof(req));
-        req.count       = *n_buffers;
-        req.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-        req.memory      = V4L2_MEMORY_MMAP;
+	memset(&req, 0, sizeof(req));
+	req.count	= *n_buffers;
+	req.type	= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	req.memory	= V4L2_MEMORY_MMAP;
 
-        PR_IO(VIDIOC_REQBUFS);
-        if (-1 == ioctl (g_file_desc, VIDIOC_REQBUFS, &req)) {
-                if (EINVAL == errno)
-                        printf("REQBUFS failed. No support for memory mapping?\n");
-                else
-                        perror("VIDIOC_REQBUFS ioctl");
-                return -1;
-        }
-        if (req.count < 2) {
-                printf("Insufficient buffer memory\n");
-                return -1;
-        }
+	PR_IO(VIDIOC_REQBUFS);
+	if (-1 == ioctl (g_file_desc, VIDIOC_REQBUFS, &req)) {
+		if (EINVAL == errno)
+			printf("REQBUFS failed. No support for memory mapping?\n");
+		else
+			perror("VIDIOC_REQBUFS ioctl");
+		return -1;
+	}
+	if (req.count < 2) {
+		printf("Insufficient buffer memory\n");
+		return -1;
+	}
 
-        /* Number of buffers might got adjusted by driver so we propagate real
-           value up to the caller */
+	/* Number of buffers might got adjusted by driver so we propagate real
+	   value up to the caller */
 
-        *n_buffers = req.count;
+	*n_buffers = req.count;
 
-        buffers = calloc (req.count, sizeof (*buffers));
+	buffers = calloc (req.count, sizeof (*buffers));
 
-        if (!buffers) {
-                printf("Out of memory\n");
+	if (!buffers) {
+		printf("Out of memory\n");
 		while(1);
-                exit (EXIT_FAILURE);
-        }
+		exit (EXIT_FAILURE);
+	}
 
-        PR_IO(VIDIOC_QUERYBUF);
-        for (buf_index = 0; buf_index < req.count; ++buf_index) {
+	PR_IO(VIDIOC_QUERYBUF);
+	for (buf_index = 0; buf_index < req.count; ++buf_index) {
 
-                memset(&buf, 0, sizeof(buf));
-                buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-                buf.m.planes    = planes;
-                buf.length      = 1; /* just one plane, depends on pixel format */
-                buf.memory      = V4L2_MEMORY_MMAP;
-                buf.index       = buf_index;
+		memset(&buf, 0, sizeof(buf));
+		buf.type	= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		buf.m.planes	= planes;
+		buf.length	= 1; /* just one plane, depends on pixel format */
+		buf.memory	= V4L2_MEMORY_MMAP;
+		buf.index	= buf_index;
 
-                if (-1 == ioctl (g_file_desc, VIDIOC_QUERYBUF, &buf)) {
-                        perror ("VIDIOC_QUERYBUF");
-                        return -1;
-                }
+		if (-1 == ioctl (g_file_desc, VIDIOC_QUERYBUF, &buf)) {
+			perror ("VIDIOC_QUERYBUF");
+			return -1;
+		}
 		printf("====== buf_index %d ==================================\n", buf_index);
-                printf("Plane offset: %d\n", buf.m.planes[0].m.mem_offset);
-                printf("Plane length: %d\n", buf.m.planes[0].length);
+		printf("Plane offset: %d\n", buf.m.planes[0].m.mem_offset);
+		printf("Plane length: %d\n", buf.m.planes[0].length);
 
-                buffers[buf_index].size[0] = buf.m.planes[0].length;
-                buffers[buf_index].addr[0] =
-                                mmap (NULL /* start anywhere */,
-                                buf.m.planes[0].length,
-                                PROT_READ | PROT_WRITE /* required */,
-                                MAP_SHARED /* recommended */,
-                                g_file_desc, buf.m.planes[0].m.mem_offset);
+		buffers[buf_index].size[0] = buf.m.planes[0].length;
+		buffers[buf_index].addr[0] =
+				mmap (NULL /* start anywhere */,
+				buf.m.planes[0].length,
+				PROT_READ | PROT_WRITE /* required */,
+				MAP_SHARED /* recommended */,
+				g_file_desc, buf.m.planes[0].m.mem_offset);
 
-                if (MAP_FAILED == buffers[buf_index].addr[0]) {
-                        perror("mmap");
-                        return -1;
-                }
+		if (MAP_FAILED == buffers[buf_index].addr[0]) {
+			perror("mmap");
+			return -1;
+		}
 
-                buffers[buf_index].index  = buf_index;
-                buffers[buf_index].width  = capture_pix_width;
-                buffers[buf_index].height = capture_pix_height;
+		buffers[buf_index].index  = buf_index;
+		buffers[buf_index].width  = capture_pix_width;
+		buffers[buf_index].height = capture_pix_height;
 
-                printf("mmaped: buf_index: %d, size: %ld, addr: %p\n", buf_index,
-                        buffers[buf_index].size[0], buffers[buf_index].addr[0]);
-        }
+		printf("mmaped: buf_index: %d, size: %ld, addr: %p\n", buf_index,
+			buffers[buf_index].size[0], buffers[buf_index].addr[0]);
+	}
 
 	return 0;
 }
 
-static void init_device (void) 
+static void init_v4l2_device (void) 
 {
 	struct v4l2_capability cap;
 	struct v4l2_cropcap cropcap;
 	struct v4l2_crop crop;
 	struct v4l2_format fmt;
 	unsigned int min;
-	int ret = 0;
 
 	if (-1 == xioctl (g_file_desc, VIDIOC_QUERYCAP, &cap)) {
 		if (EINVAL == errno) {
@@ -179,7 +180,7 @@ static void init_device (void)
 
 	cropcap.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 
-        PR_IO(VIDIOC_CROPCAP);
+	PR_IO(VIDIOC_CROPCAP);
 	if (0 == xioctl (g_file_desc, VIDIOC_CROPCAP, &cropcap)) {
 		crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		crop.c = cropcap.defrect; /* reset to default */
@@ -200,13 +201,13 @@ static void init_device (void)
 
 	CLEAR (fmt);
 
-	fmt.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	fmt.fmt.pix.width       = capture_pix_width;
-	fmt.fmt.pix.height      = capture_pix_height;
+	fmt.type		= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	fmt.fmt.pix.width	= capture_pix_width;
+	fmt.fmt.pix.height	= capture_pix_height;
 	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
-	fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED;
+	fmt.fmt.pix.field	= V4L2_FIELD_INTERLACED;
 
-        PR_IO(VIDIOC_S_FMT);
+	PR_IO(VIDIOC_S_FMT);
 	if (-1 == xioctl (g_file_desc, VIDIOC_S_FMT, &fmt))
 		errno_exit ("VIDIOC_S_FMT");
 
@@ -220,11 +221,6 @@ static void init_device (void)
 	if (fmt.fmt.pix.sizeimage < min)
 		fmt.fmt.pix.sizeimage = min;
 
-#if 1
-	ret = init_mmap(&n_buffers);
-	if(ret)  
-		errno_exit ("init_mmap error !!!");
-#endif
 }
 
 
@@ -252,10 +248,12 @@ static void open_device (void)
 	}
 }
 
-static void process_image (const void *p)
+static void *process_image (void *p)
 {
-        fputc ('.', stdout);
-        fflush (stdout);
+	fputc ('.', stdout);
+	fflush (stdout);
+	
+	return p;
 }
 
 static int read_frame(void)
@@ -266,7 +264,7 @@ static int read_frame(void)
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	buf.memory = V4L2_MEMORY_MMAP;
 
-        printf("v4l2-app: VIDIOC_DQBUF line %d\n", __LINE__);
+	PR_IO(VIDIOC_DQBUF);
 	if (-1 == xioctl (g_file_desc, VIDIOC_DQBUF, &buf)) {
 		switch (errno) {
 			case EAGAIN:
@@ -284,7 +282,7 @@ static int read_frame(void)
 	assert (buf.index < n_buffers);
 	process_image (buffers[buf.index].addr);
 
-        printf("v4l2-app: VIDIOC_QBUF line %d \n", __LINE__);
+	PR_IO(VIDIOC_QBUF);
 	if (-1 == xioctl (g_file_desc, VIDIOC_QBUF, &buf))
 		errno_exit ("VIDIOC_QBUF");
 
@@ -328,27 +326,28 @@ static void mainloop (void)
 	}
 }
 
-void start_capturing(void)
+void start_capturing(fimc_buf_t *bufs)
 {
-        unsigned int i;
-        enum v4l2_buf_type type;
+	unsigned int i;
+	enum v4l2_buf_type type;
 
 	PR_IO(VIDIOC_QBUF);
 	for (i = 0; i < n_buffers; ++i) {
 		struct v4l2_buffer buf;
 		CLEAR (buf);
+		
+		buf.type	= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		buf.memory	= V4L2_MEMORY_MMAP;
+		buf.index	= i;
 
-		buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		buf.memory      = V4L2_MEMORY_MMAP;
-		buf.index       = i;
-
+		buf.m.planes[0].m.mem_offset = (unsigned int) bufs[i].addr[0];
+		buf.m.planes[0].length = bufs[i].size[0];
+		
 		if (-1 == xioctl (g_file_desc, VIDIOC_QBUF, &buf))
 			errno_exit ("VIDIOC_QBUF");
 	}
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-
-	while(1);
 
 	PR_IO(VIDIOC_STREAMON);
 	if (-1 == xioctl (g_file_desc, VIDIOC_STREAMON, &type))
@@ -364,7 +363,7 @@ static void stop_capturing(void)
 		errno_exit ("VIDIOC_STREAMOFF");
 }
 
-static void uninit_device (void)
+static void close_mmap(void)
 {
 	unsigned int i;
 	for (i = 0; i < n_buffers; ++i)
@@ -374,12 +373,11 @@ static void uninit_device (void)
 
 static void close_device (void)
 {
-        if (-1 == close (g_file_desc))
-                errno_exit ("close");
+	if (-1 == close (g_file_desc))
+		errno_exit ("close");
 
-        g_file_desc = -1;
+	g_file_desc = -1;
 }
-
 
 /* 
  * In case of V4L2_MEMORY_USERPTR/MMAP 
@@ -395,18 +393,23 @@ static void close_device (void)
  * VIDIOC_STREAMOFF
  */
 
-
-
 int main (int argc, char ** argv)
 {
-	open_device();
-        init_device();
-        start_capturing();
-        mainloop();
-        stop_capturing();
-        uninit_device();
-        close_device();
-        exit(EXIT_SUCCESS);
+	int ret = 0;
 
-        return 0;
+	open_device();
+	init_v4l2_device();
+
+	ret = init_mmap(&n_buffers);
+	if(ret)	 
+		errno_exit ("init_mmap error !!!");
+
+	start_capturing(buffers);
+	mainloop();
+	stop_capturing();
+	close_mmap();
+	close_device();
+	exit(EXIT_SUCCESS);
+
+	return ret;
 }
