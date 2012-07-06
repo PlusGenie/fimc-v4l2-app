@@ -71,7 +71,6 @@ static int init_mmap(unsigned int *n_buffers)
 	struct v4l2_requestbuffers req;
 	unsigned int buf_index;
 	struct v4l2_plane planes[VIDEO_MAX_PLANES];
-	struct v4l2_buffer buf;
 
 	memset(&req, 0, sizeof(req));
 	req.count	= *n_buffers;
@@ -100,13 +99,12 @@ static int init_mmap(unsigned int *n_buffers)
 
 	if (!buffers) {
 		printf("Out of memory\n");
-		while(1);
 		exit (EXIT_FAILURE);
 	}
 
 	PR_IO(VIDIOC_QUERYBUF);
 	for (buf_index = 0; buf_index < req.count; ++buf_index) {
-
+		struct v4l2_buffer buf;
 		memset(&buf, 0, sizeof(buf));
 		buf.type	= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		buf.m.planes	= planes;
@@ -250,7 +248,7 @@ static void open_device (void)
 
 static void *process_image (void *p)
 {
-	fputc ('.', stdout);
+	fputc ('*', stdout);
 	fflush (stdout);
 	
 	return p;
@@ -289,6 +287,7 @@ static int read_frame(void)
 	return 1;
 }
 
+#define WAIT_DELAY 10
 static void mainloop (void)
 {
 	unsigned int count;
@@ -304,7 +303,7 @@ static void mainloop (void)
 			FD_SET (g_file_desc, &fds);
 
 			/* Timeout. */
-			tv.tv_sec = 2;
+			tv.tv_sec = WAIT_DELAY;
 			tv.tv_usec = 0;
 			r = select (g_file_desc + 1, &fds, NULL, NULL, &tv);
 			if (-1 == r) {
@@ -315,7 +314,9 @@ static void mainloop (void)
 			}
 
 			if (0 == r) {
-				fprintf (stderr, "select timeout\n");
+				fprintf (stderr, "=====================\n");
+				fprintf (stderr, "select timeout %d sec\n", (int)tv.tv_sec);
+				fprintf (stderr, "=====================\n\n");
 				exit (EXIT_FAILURE);
 			}
 
@@ -330,26 +331,25 @@ void start_capturing(fimc_buf_t *bufs)
 {
 	unsigned int i;
 	enum v4l2_buf_type type;
+	struct v4l2_plane planes[VIDEO_MAX_PLANES];
 
 	PR_IO(VIDIOC_QBUF);
 	for (i = 0; i < n_buffers; ++i) {
 		struct v4l2_buffer buf;
 		CLEAR (buf);
-		
 		buf.type	= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		buf.memory	= V4L2_MEMORY_MMAP;
 		buf.index	= i;
+		buf.m.planes	= planes;
+		buf.length	= 1;
+		buf.m.planes[0].bytesused = bufs[i].size[0];
 
-		buf.m.planes[0].m.mem_offset = (unsigned int) bufs[i].addr[0];
-		buf.m.planes[0].length = bufs[i].size[0];
-		
 		if (-1 == xioctl (g_file_desc, VIDIOC_QBUF, &buf))
 			errno_exit ("VIDIOC_QBUF");
 	}
 
-	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-
 	PR_IO(VIDIOC_STREAMON);
+	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	if (-1 == xioctl (g_file_desc, VIDIOC_STREAMON, &type))
 		errno_exit ("VIDIOC_STREAMON");
 }
