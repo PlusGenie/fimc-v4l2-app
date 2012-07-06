@@ -249,6 +249,7 @@ static void open_device (void)
 static void *process_image (void *p)
 {
 	fputc ('*', stdout);
+	printf("DATA\n");
 	fflush (stdout);
 	
 	return p;
@@ -257,6 +258,7 @@ static void *process_image (void *p)
 static int read_frame(void)
 {
 	struct v4l2_buffer buf;
+	struct v4l2_plane planes[VIDEO_MAX_PLANES];
 
 	CLEAR (buf);
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -277,10 +279,19 @@ static int read_frame(void)
 				errno_exit ("VIDIOC_DQBUF");
 		}
 	}
+
 	assert (buf.index < n_buffers);
 	process_image (buffers[buf.index].addr);
 
 	PR_IO(VIDIOC_QBUF);
+	CLEAR (buf);
+	buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	buf.memory      = V4L2_MEMORY_MMAP;
+	buf.index       = buf.index;
+	buf.m.planes    = planes;
+	buf.length      = 1;
+	buf.m.planes[0].bytesused = buffers[buf.index].size[0];
+
 	if (-1 == xioctl (g_file_desc, VIDIOC_QBUF, &buf))
 		errno_exit ("VIDIOC_QBUF");
 
