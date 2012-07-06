@@ -1,8 +1,16 @@
 /*
- *  2012 (C) Linaro 
+ *  2012      (C) Linaro 
  *  Sangwook Lee <sangwook.lee@linaro.org>
  *  Only MMAP FIMC V4L2 video capture example based on v4l2 capture.c 
- *  
+ * 
+ *  Copyright (C) 2004 Samsung Electronics 
+ *                   <SW.LEE, hitchcar@sec.samsung.com> 
+ *		based yuv_4p.c 
+ *
+ * How to use this app(Ubuntu)
+ *
+ * $>  display -size 640x480 422X0.yuv
+ *
  *  The main purpose of this app is to show to use V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
  *
  *  This program can be used and distributed without restrictions.
@@ -48,6 +56,8 @@ static int capture_pix_width = 640;
 static int capture_pix_height = 480;
 static char * dev_name	= "/dev/video1";
 static int g_file_desc = -1;
+static int file_loop = 0;	/* change file name */
+#define INPUT_DATA_COUNT 10 /* number of save files */
 
 static void errno_exit(const char *s)
 {
@@ -246,11 +256,36 @@ static void open_device (void)
 	}
 }
 
-static void *process_image (void *p)
+static void save_yuv(int bpp, char *g_yuv)
 {
-	fputc ('*', stdout);
-	printf("DATA\n");
-	fflush (stdout);
+	FILE *yuv_fp = NULL;
+	char file_name[100];
+
+	if (bpp == 16 ) {
+		sprintf(&file_name[0], "422X%d.yuv", file_loop);
+		printf("422X%d.yuv", file_loop);
+	}
+	else { 
+		sprintf(&file_name[0], "420X%d.yuv", file_loop);
+		printf("420X%d.yuv\n", file_loop);
+	}
+	fflush(stdout);
+	/* file create/open, note to "wb" */
+	yuv_fp = fopen(&file_name[0], "wb");
+	if (!yuv_fp) {
+		perror(&file_name[0]);
+	}
+	fwrite(g_yuv, 1, capture_pix_height * capture_pix_width * bpp / 8, yuv_fp);
+	fclose(yuv_fp);
+	file_loop++;
+}
+
+static void *process_image (char *p)
+{
+//	fputc ('*', stdout);
+//	printf("DATA\n");
+	save_yuv(16, p);
+//	fflush (stdout);
 	
 	return p;
 }
@@ -259,6 +294,7 @@ static int read_frame(void)
 {
 	struct v4l2_buffer buf;
 	struct v4l2_plane planes[VIDEO_MAX_PLANES];
+	int index;
 
 	CLEAR (buf);
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -281,16 +317,18 @@ static int read_frame(void)
 	}
 
 	assert (buf.index < n_buffers);
-	process_image (buffers[buf.index].addr);
+	process_image (buffers[buf.index].addr[0]);
+
+	index = buf.index;
 
 	PR_IO(VIDIOC_QBUF);
 	CLEAR (buf);
 	buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	buf.memory      = V4L2_MEMORY_MMAP;
-	buf.index       = buf.index;
+	buf.index       = index;
 	buf.m.planes    = planes;
 	buf.length      = 1;
-	buf.m.planes[0].bytesused = buffers[buf.index].size[0];
+	buf.m.planes[0].bytesused = buffers[index].size[0];
 
 	if (-1 == xioctl (g_file_desc, VIDIOC_QBUF, &buf))
 		errno_exit ("VIDIOC_QBUF");
@@ -298,12 +336,11 @@ static int read_frame(void)
 	return 1;
 }
 
-#define WAIT_DELAY 10
+#define WAIT_DELAY 4
 static void mainloop (void)
 {
-	unsigned int count;
+	unsigned int count = INPUT_DATA_COUNT;
 
-	count = 100;
 	while (count-- > 0) {
 		for (;;) {
 			fd_set fds;
