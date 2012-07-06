@@ -1,5 +1,5 @@
 /*
- *  2012      (C) Linaro 
+ *  Copyright (C) 2012 Linaro 
  *  Sangwook Lee <sangwook.lee@linaro.org>
  *  Only MMAP FIMC V4L2 video capture example based on v4l2 capture.c 
  * 
@@ -57,7 +57,7 @@ static int capture_pix_height = 480;
 static char * dev_name	= "/dev/video1";
 static int g_file_desc = -1;
 static int file_loop = 0;	/* change file name */
-#define INPUT_DATA_COUNT 10 /* number of save files */
+#define INPUT_DATA_COUNT 5 /* number of save files */
 
 static void errno_exit(const char *s)
 {
@@ -281,9 +281,12 @@ static void save_yuv(int bpp, char *g_yuv)
 
 static void process_image (char *p)
 {
-	if (!file_loop) 
-		return;	/* Discard first frame */ 
-	save_yuv(16, p);
+	if (!file_loop) {
+		file_loop++;/* Discard first frame */ 
+		return;	
+	}
+	save_yuv(16, p);	/* 422 */
+//	save_yuv(12, p);	/* 420 */
 	file_loop++;
 }
 
