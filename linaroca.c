@@ -52,12 +52,13 @@ typedef struct buffer {
 
 fimc_buf_t *buffers = NULL;
 static unsigned int n_buffers = 4;
-static int capture_pix_width = 640;
-static int capture_pix_height = 480;
+static int capture_pix_width = 0;
+static int capture_pix_height = 0;
 static char * dev_name	= "/dev/video1";
 static int g_file_desc = -1;
 static int file_loop = 0;	/* change file name */
-#define INPUT_DATA_COUNT 5 /* number of save files */
+
+static int file_count = 0;  /* number of save files */
 
 static void errno_exit(const char *s)
 {
@@ -160,7 +161,6 @@ static void init_v4l2_device (void)
 	struct v4l2_cropcap cropcap;
 	struct v4l2_crop crop;
 	struct v4l2_format fmt;
-	unsigned int min;
 
 	if (-1 == xioctl (g_file_desc, VIDIOC_QUERYCAP, &cap)) {
 		if (EINVAL == errno) {
@@ -208,12 +208,12 @@ static void init_v4l2_device (void)
 	}
 
 	CLEAR (fmt);
-
+        fmt.fmt.pix_mp.num_planes = 1;
 	fmt.type		= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	fmt.fmt.pix.width	= capture_pix_width;
-	fmt.fmt.pix.height	= capture_pix_height;
-	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
-	fmt.fmt.pix.field	= V4L2_FIELD_INTERLACED;
+	fmt.fmt.pix_mp.width	= capture_pix_width;
+	fmt.fmt.pix_mp.height	= capture_pix_height;
+	fmt.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_YUYV;
+	fmt.fmt.pix_mp.field = V4L2_FIELD_ANY;
 
 	PR_IO(VIDIOC_S_FMT);
 	if (-1 == xioctl (g_file_desc, VIDIOC_S_FMT, &fmt))
@@ -221,6 +221,7 @@ static void init_v4l2_device (void)
 
 	/* Note VIDIOC_S_FMT may change width and height. */
 
+#if 0
 	/* Buggy driver paranoia. */
 	min = fmt.fmt.pix.width * 2;
 	if (fmt.fmt.pix.bytesperline < min)
@@ -228,6 +229,7 @@ static void init_v4l2_device (void)
 	min = fmt.fmt.pix.bytesperline * fmt.fmt.pix.height;
 	if (fmt.fmt.pix.sizeimage < min)
 		fmt.fmt.pix.sizeimage = min;
+#endif
 
 }
 
@@ -281,12 +283,14 @@ static void save_yuv(int bpp, char *g_yuv)
 
 static void process_image (char *p)
 {
+	int bpp = 16;
+
 	if (!file_loop) {
 		file_loop++;/* Discard first frame */ 
 		return;	
 	}
-	save_yuv(16, p);	/* 422 */
-//	save_yuv(12, p);	/* 420 */
+
+	save_yuv(bpp, p);	/* 422 */
 	file_loop++;
 }
 
@@ -339,7 +343,7 @@ static int read_frame(void)
 #define WAIT_DELAY 4
 static void mainloop (void)
 {
-	unsigned int count = INPUT_DATA_COUNT;
+	unsigned int count = file_count;
 
 	while (count-- > 0) {
 		for (;;) {
@@ -445,6 +449,15 @@ int main (int argc, char ** argv)
 {
 	int ret = 0;
 
+	if (argc != 4) {  
+                printf("%s <width> <height> <num_of_frames> \n", argv[0]); 
+		goto err;
+	}
+
+	capture_pix_width = atoi(argv[1]);  
+    	capture_pix_height = atoi(argv[2]);
+	file_count = atoi(argv[3]);
+
 	open_device();
 	init_v4l2_device();
 
@@ -459,5 +472,6 @@ int main (int argc, char ** argv)
 	close_device();
 	exit(EXIT_SUCCESS);
 
+err:
 	return ret;
 }
