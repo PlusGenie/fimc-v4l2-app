@@ -456,7 +456,7 @@ int main (int argc, char ** argv)
 
 	capture_pix_width = atoi(argv[1]);  
     	capture_pix_height = atoi(argv[2]);
-	file_count = atoi(argv[3]);
+	file_count = atoi(argv[3]) + 1;
 
 	open_device();
 	init_v4l2_device();
