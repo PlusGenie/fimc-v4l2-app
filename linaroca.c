@@ -277,17 +277,14 @@ static void save_yuv(int bpp, char *g_yuv)
 	}
 	fwrite(g_yuv, 1, capture_pix_height * capture_pix_width * bpp / 8, yuv_fp);
 	fclose(yuv_fp);
-	file_loop++;
 }
 
-static void *process_image (char *p)
+static void process_image (char *p)
 {
-//	fputc ('*', stdout);
-//	printf("DATA\n");
+	if (!file_loop) 
+		return;	/* Discard first frame */ 
 	save_yuv(16, p);
-//	fflush (stdout);
-	
-	return p;
+	file_loop++;
 }
 
 static int read_frame(void)
