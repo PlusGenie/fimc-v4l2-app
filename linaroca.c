@@ -1,8 +1,14 @@
 /*
  *  Copyright (C) 2012 Linaro 
  *  Sangwook Lee <sangwook.lee@linaro.org>
- *  Only MMAP FIMC V4L2 video capture example based on v4l2 capture.c 
- * 
+ *   Only MMAP FIMC V4L2 video capture example
+ *   based on V4L2 Specification, Appendix B: Video Capture Example 
+ *   (http://v4l2spec.bytesex.org/spec/capture-example.html)   
+ *   Merged v4l2grab 
+ *
+ *  Copyright (C) 2009 by Tobias Müller     
+ *   Tobias_Mueller@twam.info               
+ *
  *  Copyright (C) 2004 Samsung Electronics 
  *                   <SW.LEE, hitchcar@sec.samsung.com> 
  *		based yuv_4p.c 
@@ -35,6 +41,8 @@
 
 #include <linux/videodev2.h>
 
+#include "jpeglib.h"
+
 #define CLEAR(x) memset (&(x), 0, sizeof (x))
 
 #define PR_IO(x)	printf("v4l2-app:line%d "#x"\n",__LINE__)
@@ -57,8 +65,9 @@ static int capture_pix_height = 0;
 static char * dev_name	= "/dev/video1";
 static int g_file_desc = -1;
 static int file_loop = 0;	/* change file name */
-
 static int file_count = 0;  /* number of save files */
+unsigned char* dst = NULL;
+static unsigned char jpegQuality = 70;
 
 static void errno_exit(const char *s)
 {
@@ -281,16 +290,125 @@ static void save_yuv(int bpp, char *g_yuv)
 	fclose(yuv_fp);
 }
 
+
+int save_jpeg = 1;
+static void jpegWrite(unsigned char* img)
+{
+	struct jpeg_compress_struct cinfo;
+	struct jpeg_error_mgr jerr;
+	int bpp = 16;
+        char file_name[100];
+	FILE *outfile;
+	JSAMPROW row_pointer[1];
+
+        if (bpp == 16 ) {
+                sprintf(&file_name[0], "422X%d.jpg", file_loop);
+                printf("422X%d.jpg", file_loop);
+        }
+        else {
+                sprintf(&file_name[0], "420X%d.jpg", file_loop);
+                printf("420X%d.jpg\n", file_loop);
+        }
+	outfile = fopen(&file_name[0], "wb" );
+
+	// try to open file for saving
+	if (!outfile) {
+		errno_exit("jpeg");
+	}
+
+	// create jpeg data
+	cinfo.err = jpeg_std_error( &jerr );
+	jpeg_create_compress(&cinfo);
+	jpeg_stdio_dest(&cinfo, outfile);
+
+	// set image parameters
+	cinfo.image_width = capture_pix_width;
+	cinfo.image_height = capture_pix_height;
+	cinfo.input_components = 3;
+	cinfo.in_color_space = JCS_RGB;
+
+	// set jpeg compression parameters to default
+	jpeg_set_defaults(&cinfo);
+	// and then adjust quality setting
+	jpeg_set_quality(&cinfo, jpegQuality, TRUE);
+
+	// start compress 
+	jpeg_start_compress(&cinfo, TRUE);
+
+	// feed data
+	while (cinfo.next_scanline < cinfo.image_height) {
+		row_pointer[0] = &img[cinfo.next_scanline * cinfo.image_width *  cinfo.input_components];
+		jpeg_write_scanlines(&cinfo, row_pointer, 1);
+	}
+
+	// finish compression
+	jpeg_finish_compress(&cinfo);
+
+	// destroy jpeg data
+	jpeg_destroy_compress(&cinfo);
+
+	// close output file
+	fclose(outfile);
+}
+
+
+/**
+  Convert from YUV422 format to RGB888. Formulae are described on http://en.wikipedia.org/wiki/YUV
+
+  \param width width of image
+  \param height height of image
+  \param src source
+  \param dst destination
+*/
+static void YUV422toRGB888(int width, int height, unsigned char *src, unsigned char *dst)
+{
+  int line, column;
+  unsigned char *py, *pu, *pv;
+  unsigned char *tmp = dst;
+
+  /* In this format each four bytes is two pixels. Each four bytes is two Y's, a Cb and a Cr. 
+     Each Y goes to one of the pixels, and the Cb and Cr belong to both pixels. */
+  py = src;
+  pu = src + 1;
+  pv = src + 3;
+
+  #define CLIP(x) ( (x)>=0xFF ? 0xFF : ( (x) <= 0x00 ? 0x00 : (x) ) )
+
+  for (line = 0; line < height; ++line) {
+    for (column = 0; column < width; ++column) {
+      *tmp++ = CLIP((double)*py + 1.402*((double)*pv-128.0));
+      *tmp++ = CLIP((double)*py - 0.344*((double)*pu-128.0) - 0.714*((double)*pv-128.0));
+      *tmp++ = CLIP((double)*py + 1.772*((double)*pu-128.0));
+
+      // increase py every time
+      py += 2;
+      // increase pu,pv every second time
+      if ((column & 1)==1) {
+        pu += 4;
+        pv += 4;
+      }
+    }
+  }
+}
+
 static void process_image (char *p)
 {
 	int bpp = 16;
-
 	if (!file_loop) {
 		file_loop++;/* Discard first frame */ 
 		return;	
 	}
 
-	save_yuv(bpp, p);	/* 422 */
+	if(save_jpeg) {
+		unsigned char* src = (unsigned char*)p;
+		// convert from YUV422 to RGB888
+		YUV422toRGB888(capture_pix_width, capture_pix_height,src,dst);
+		// write jpeg
+		jpegWrite(dst);
+	}
+	else {
+		save_yuv(bpp, p);	/* 422 */
+	}
 	file_loop++;
 }
 
@@ -458,6 +576,8 @@ int main (int argc, char ** argv)
     	capture_pix_height = atoi(argv[2]);
 	file_count = atoi(argv[3]) + 1;
 
+	dst = malloc(capture_pix_width*capture_pix_height*3*sizeof(char));
+
 	open_device();
 	init_v4l2_device();
 
@@ -470,6 +590,7 @@ int main (int argc, char ** argv)
 	stop_capturing();
 	close_mmap();
 	close_device();
+	free(dst);
 	exit(EXIT_SUCCESS);
 
 err:
