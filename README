@@ -1,0 +1,34 @@
+HOW TO COMPILE LIBJPEG FOR ARM
+------------------------------------
+
+http://www.ijg.org/files/jpegsrc.v8d.tar.gzk
+CC=arm-xxx-gcc
+./configure --host=arm
+make install prefix=/home/dev/linaro/people/sangwook/v4l2/fimc-v4l2-app/swlib
+
+
+Sample Makefile
+--------------------------------------
+Thi is to link libjpeg.a
+
+=========SAMPLE Makefile ==============
+
+CROSS_COMPILE ?= arm-linux-gnueabi-
+
+CC      := $(CROSS_COMPILE)gcc
+CFLAGS  ?=  -Wall -I./include
+LDFLAGS ?=  -static -L./lib -ljpeg
+
+%.o : %.c
+        $(CC) $(CFLAGS) -c -o $@ $<
+
+all: linaroca
+
+linaroca: linaroca.o libjpeg.a
+        $(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+clean:
+        -rm -f *.o
+        -rm -f linaroca
+
+===================================
