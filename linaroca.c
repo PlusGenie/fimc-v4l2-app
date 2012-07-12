@@ -13,9 +13,6 @@
  *                   <SW.LEE, hitchcar@sec.samsung.com> 
  *		based yuv_4p.c 
  *
- * How to use this app(Ubuntu)
- *
- * $>  display -size 640x480 422X0.yuv
  *
  *  The main purpose of this app is to show to use V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
  *
@@ -60,20 +57,81 @@ typedef struct buffer {
 
 fimc_buf_t *buffers = NULL;
 static unsigned int n_buffers = 4;
-static int capture_pix_width = 0;
-static int capture_pix_height = 0;
+static int g_pix_width = 0;
+static int g_pix_height = 0;
 static char * dev_name	= "/dev/video1";
 static int g_file_desc = -1;
 static int file_loop = 0;	/* change file name */
-static int file_count = 0;  /* number of save files */
-unsigned char* dst = NULL;
+static int g_file_count = 0;  /* number of save files */
+unsigned char* g_img_buf = NULL;
 static unsigned char jpegQuality = 70;
+
+#define S5K_CTRL_NUM 4
+int g_brightness = 0xDEAD; 
+int g_contrast = 0;
+int g_saturation = 0;
+int g_sharpness = 0;
+	
+struct v4l2_control s5k_ctrl[8]= {
+	{ V4L2_CID_BRIGHTNESS, 0},
+	{ V4L2_CID_CONTRAST, 0},
+	{ V4L2_CID_SATURATION, 0},
+	{ V4L2_CID_SHARPNESS, 0},
+};
 
 static void errno_exit(const char *s)
 {
 	fprintf (stderr, "%s error %d, %s\n",
 			s, errno, strerror (errno));
 	exit (EXIT_FAILURE);
+}
+
+static void fill_ctrls(void)
+{
+	s5k_ctrl->value = g_brightness;
+	(s5k_ctrl+1)->value = g_contrast;
+	(s5k_ctrl+2)->value = g_saturation;
+	(s5k_ctrl+3)->value = g_sharpness;
+}
+
+static void start_control_testing(void)
+{
+	struct v4l2_format fmt;
+	int i, ret = 0;
+
+	PR_IO(VIDIOC_G_FMT);
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	ret = ioctl(g_file_desc, VIDIOC_G_FMT, &fmt);
+	if (ret) {
+		errno_exit("Failed to read format");
+		return;
+	}
+
+	fill_ctrls();
+	
+	printf(" buffer parameters: %dx%d plane[0]=%d\n",
+			fmt.fmt.pix_mp.width, fmt.fmt.pix_mp.height,
+			fmt.fmt.pix_mp.plane_fmt[0].sizeimage);
+
+	
+	printf("====== Calling S_CTRL ==================================\n");
+	
+	for (i = 0; i < S5K_CTRL_NUM; i++) {
+		ret |= ioctl(g_file_desc, VIDIOC_S_CTRL, s5k_ctrl + i);
+	}
+	if (ret) {
+		errno_exit(" error S_CTRL");
+	}
+
+	printf("====== Calling G_CTRL ==================================\n");
+	for (i = 0; i < S5K_CTRL_NUM; i++) {
+		ret |= ioctl(g_file_desc, VIDIOC_G_CTRL, s5k_ctrl + i);
+		printf("  CTRL ID %d VAL %d \n", (s5k_ctrl + i)->id, (s5k_ctrl + i)->value);
+	}
+	if (ret) {
+		errno_exit(" error G_CTRL");
+	}
+
 }
 
 static int xioctl (int fd, int request, void * arg)
@@ -154,8 +212,8 @@ static int init_mmap(unsigned int *n_buffers)
 		}
 
 		buffers[buf_index].index  = buf_index;
-		buffers[buf_index].width  = capture_pix_width;
-		buffers[buf_index].height = capture_pix_height;
+		buffers[buf_index].width  = g_pix_width;
+		buffers[buf_index].height = g_pix_height;
 
 		printf("mmaped: buf_index: %d, size: %ld, addr: %p\n", buf_index,
 			buffers[buf_index].size[0], buffers[buf_index].addr[0]);
@@ -219,8 +277,8 @@ static void init_v4l2_device (void)
 	CLEAR (fmt);
         fmt.fmt.pix_mp.num_planes = 1;
 	fmt.type		= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	fmt.fmt.pix_mp.width	= capture_pix_width;
-	fmt.fmt.pix_mp.height	= capture_pix_height;
+	fmt.fmt.pix_mp.width	= g_pix_width;
+	fmt.fmt.pix_mp.height	= g_pix_height;
 	fmt.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_YUYV;
 	fmt.fmt.pix_mp.field = V4L2_FIELD_ANY;
 
@@ -273,12 +331,10 @@ static void save_yuv(int bpp, char *g_yuv)
 	char file_name[100];
 
 	if (bpp == 16 ) {
-		sprintf(&file_name[0], "422X%d.yuv", file_loop);
-		printf("422X%d.yuv", file_loop);
+		sprintf(&file_name[0], "422X_%d.yuv",file_loop);
 	}
 	else { 
 		sprintf(&file_name[0], "420X%d.yuv", file_loop);
-		printf("420X%d.yuv\n", file_loop);
 	}
 	fflush(stdout);
 	/* file create/open, note to "wb" */
@@ -286,7 +342,7 @@ static void save_yuv(int bpp, char *g_yuv)
 	if (!yuv_fp) {
 		perror(&file_name[0]);
 	}
-	fwrite(g_yuv, 1, capture_pix_height * capture_pix_width * bpp / 8, yuv_fp);
+	fwrite(g_yuv, 1, g_pix_height * g_pix_width * bpp / 8, yuv_fp);
 	fclose(yuv_fp);
 }
 
@@ -302,12 +358,16 @@ static void jpegWrite(unsigned char* img)
 	JSAMPROW row_pointer[1];
 
         if (bpp == 16 ) {
-                sprintf(&file_name[0], "422X%d.jpg", file_loop);
-                printf("422X%d.jpg", file_loop);
+		sprintf(&file_name[0], "linaro%dw%db%dc%dsa%dsd%d.jpg",
+		file_loop, 
+		g_pix_width,
+		g_brightness, 
+		g_contrast,
+		g_saturation,
+		g_sharpness);
         }
         else {
                 sprintf(&file_name[0], "420X%d.jpg", file_loop);
-                printf("420X%d.jpg\n", file_loop);
         }
 	outfile = fopen(&file_name[0], "wb" );
 
@@ -322,8 +382,8 @@ static void jpegWrite(unsigned char* img)
 	jpeg_stdio_dest(&cinfo, outfile);
 
 	// set image parameters
-	cinfo.image_width = capture_pix_width;
-	cinfo.image_height = capture_pix_height;
+	cinfo.image_width = g_pix_width;
+	cinfo.image_height = g_pix_height;
 	cinfo.input_components = 3;
 	cinfo.in_color_space = JCS_RGB;
 
@@ -360,7 +420,8 @@ static void jpegWrite(unsigned char* img)
   \param src source
   \param dst destination
 */
-static void YUV422toRGB888(int width, int height, unsigned char *src, unsigned char *dst)
+static void YUV422toRGB888(int width, int height, unsigned char *src, 
+									unsigned char *dst)
 {
   int line, column;
   unsigned char *py, *pu, *pv;
@@ -393,7 +454,8 @@ static void YUV422toRGB888(int width, int height, unsigned char *src, unsigned c
 
 static void process_image (char *p)
 {
-	int bpp = 16;
+	int bpp =16;
+	
 	if (!file_loop) {
 		file_loop++;/* Discard first frame */ 
 		return;	
@@ -402,9 +464,9 @@ static void process_image (char *p)
 	if(save_jpeg) {
 		unsigned char* src = (unsigned char*)p;
 		// convert from YUV422 to RGB888
-		YUV422toRGB888(capture_pix_width, capture_pix_height,src,dst);
+		YUV422toRGB888(g_pix_width, g_pix_height,src,g_img_buf);
 		// write jpeg
-		jpegWrite(dst);
+		jpegWrite(g_img_buf);
 	}
 	else {
 		save_yuv(bpp, p);	/* 422 */
@@ -461,7 +523,7 @@ static int read_frame(void)
 #define WAIT_DELAY 4
 static void mainloop (void)
 {
-	unsigned int count = file_count;
+	unsigned int count = g_file_count;
 
 	while (count-- > 0) {
 		for (;;) {
@@ -567,16 +629,22 @@ int main (int argc, char ** argv)
 {
 	int ret = 0;
 
-	if (argc != 4) {  
-                printf("%s <width> <height> <num_of_frames> \n", argv[0]); 
+	if (argc != 8 ) {  
+		printf("%s width height num_of_frames bright contrast saturation sharpness \n", argv[0]);
+		printf("EX)  $ %s 640 480  3  0 0 0 0 \n", argv[0]);
 		goto err;
 	}
 
-	capture_pix_width = atoi(argv[1]);  
-    	capture_pix_height = atoi(argv[2]);
-	file_count = atoi(argv[3]) + 1;
+	g_pix_width = atoi(argv[1]);  
+	g_pix_height = atoi(argv[2]);
+	g_file_count = atoi(argv[3]) + 1;
 
-	dst = malloc(capture_pix_width*capture_pix_height*3*sizeof(char));
+	g_brightness = atoi(argv[4]);
+	g_contrast = atoi(argv[5]);
+	g_saturation = atoi(argv[6]);
+	g_sharpness = atoi(argv[7]);
+
+	g_img_buf = malloc(g_pix_width*g_pix_height*3*sizeof(char));
 
 	open_device();
 	init_v4l2_device();
@@ -585,12 +653,13 @@ int main (int argc, char ** argv)
 	if(ret)	 
 		errno_exit ("init_mmap error !!!");
 
+	start_control_testing();
 	start_capturing(buffers);
 	mainloop();
 	stop_capturing();
 	close_mmap();
 	close_device();
-	free(dst);
+	free(g_img_buf);
 	exit(EXIT_SUCCESS);
 
 err:
