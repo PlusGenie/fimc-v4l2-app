@@ -358,7 +358,7 @@ static void jpegWrite(unsigned char* img)
 	JSAMPROW row_pointer[1];
 
         if (bpp == 16 ) {
-		sprintf(&file_name[0], "linaro%dw%db%dc%dsa%dsd%d.jpg",
+		sprintf(&file_name[0], "linaro%dw%db%dc%dsa%dsp%d.jpg",
 		file_loop, 
 		g_pix_width,
 		g_brightness, 
@@ -631,7 +631,7 @@ int main (int argc, char ** argv)
 
 	if (argc != 8 ) {  
 		printf("%s width height num_of_frames bright contrast saturation sharpness \n", argv[0]);
-		printf("EX)  $ %s 640 480  3  0 0 0 0 \n", argv[0]);
+		printf("EX)  $ %s 640 480  3  0 0 0 24612 \n", argv[0]);
 		goto err;
 	}
 
