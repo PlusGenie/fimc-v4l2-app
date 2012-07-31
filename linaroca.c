@@ -631,7 +631,7 @@ int main (int argc, char ** argv)
 
 	if (argc != 8 ) {  
 		printf("%s width height num_of_frames bright contrast saturation sharpness \n", argv[0]);
-		printf("EX)  $ %s 640 480  3  0 0 0 24612 \n", argv[0]);
+		printf("EX)  $ %s 640 480  3  0 0 0 2 \n", argv[0]);
 		goto err;
 	}
 
