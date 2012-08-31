@@ -1,11 +1,9 @@
 HOW TO COMPILE LIBJPEG FOR ARM
-------------------------------------
-
+===================================
 http://www.ijg.org/files/jpegsrc.v8d.tar.gzk
 CC=arm-xxx-gcc
 ./configure --host=arm
 make install prefix=/home/dev/linaro/people/sangwook/v4l2/fimc-v4l2-app/swlib
-
 
 Sample Makefile
 --------------------------------------
@@ -32,3 +30,9 @@ clean:
         -rm -f linaroca
 
 ===================================
+Firmware generator 
+==================================
+for s5k4ecgx (5MP Camera) from Samsung
+HOW TO COMPILE
+$ gcc -o genfw genfw.c -lz
+
