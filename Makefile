@@ -18,7 +18,10 @@ all: linaroca genfw
 linaroca: linaroca.o libjpeg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+genfw: genfw.c
+	gcc -o $@ $^ -lz
+
 clean:
 	-rm -f *.o
-	-rm -f linaroca
+	-rm -f linaroca genfw
 

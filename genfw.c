@@ -28,6 +28,7 @@ unsigned long calcCRC (const unsigned char *, signed long,
 void makeCRCtable(unsigned long *, unsigned long);
 
 #define BUFFER_LEN       4096L
+#define FW_FILE_NAME	"s5k4ecgx.bin"
 #define BUFFER_SIZE (ENTRY_NUMBER+1)*6
 
 unsigned long getFileCRC(FILE *s)
@@ -38,8 +39,6 @@ unsigned long getFileCRC(FILE *s)
 	size_t len;
 
 //	crc = crc32(crc, Z_NULL, 0);
-	printf("init crc seed %#lx\n", crc);
-
 	while ( (len = fread(buf, 1, sizeof(buf), s)) != 0 )
 		crc = crc32((crc ^ 0xffffffff),buf,len) ^ 0xffffffff;
 
@@ -82,11 +81,11 @@ int main()
 {
 	unsigned long crc;
 	int ret;
-	char *fileName = "s5k4ecgx.bin";
+	char *fileName = FW_FILE_NAME;
 	FILE *catalogue; 
 
 	createFile(fileName); 
-	printf("Generated firmware file: %s\n", fileName);
+	printf("Making firmware: %s\n", fileName);
 
 	catalogue = fopen(fileName, "rb"); 
 	crc = getFileCRC(catalogue);
@@ -100,7 +99,7 @@ int main()
 	/* Make 4 bytes CRC */ 
 	fwrite(&crc, 4, 1, catalogue);
 	fclose(catalogue);
-	printf("Added CRC to %s\n", fileName); 
+	printf("Done\n"); 
 
 	return 0; 
 }
