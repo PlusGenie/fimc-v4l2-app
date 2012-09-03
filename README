@@ -36,3 +36,6 @@ for s5k4ecgx (5MP Camera) from Samsung
 HOW TO COMPILE
 $ gcc -o genfw genfw.c -lz
 
+$ ./genfw s5k4ecgx_evt1_1.txt
+$ ls -al s5k4ecgx.bin
+

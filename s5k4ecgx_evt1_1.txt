@@ -1,8 +1,5 @@
-/* Total register sets */
-//#define ENTRY_NUMBER 2750
-#define ENTRY_NUMBER 2
+#define ENTRY_NUMBER 2750
 
-#if 0
 CatalogueRecord firmware[] = {	
 	{ 0xd0001082, 0x01aa },
 	{ 0xd0001084, 0x01aa },
@@ -2755,13 +2752,3 @@ CatalogueRecord firmware[] = {
 	{ 0x7000023e, 0x0001 },
 	{ 0x70000240, 0x0001 },
 };
-
-#else
-
-CatalogueRecord firmware[] = {	
-	{ 0xd0001082, 0x01aa },
-	{ 0xd0001084, 0x01aa },
-};
-
-#endif
-
